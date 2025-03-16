@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech Recognition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/eligrey/FileSaver.js/dist/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 24px;
+            }
+            textarea {
+                font-size: 14px;
+            }
+            button {
+                width: 100%;
+                margin: 5px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Speech Recognition</h1>
+    <button id="start-recognition">Započni snimanje</button>
+    <button id="stop-recognition">Zaustavi snimanje</button>
+    <button id="export-pdf">Preuzmi kao PDF</button>
+    <button id="export-word">Preuzmi kao Word</button>
+    <textarea id="result" rows="10" cols="50" placeholder="Tvoje snimanje će biti prikazano ovde..."></textarea>
+
+    <script>
+        // Set a random background image from Picsum
+        const randomImageUrl = `https://picsum.photos/1920/1080?random=${Math.floor(Math.random() * 1000)}`;
+        document.body.style.backgroundImage = `url('${randomImageUrl}')`;
+
+        let recognition; // Declare recognition globally
+        let isListening = false; // Flag to track if recognition is active
+        let finalTranscript = ''; // Variable to hold final transcript
+
+        document.getElementById('start-recognition').addEventListener('click', () => {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.lang = 'sr-RS'; // Serbian language
+                recognition.continuous = true; // Keep recording continuously
+                recognition.interimResults = true; // Get interim results
+
+                recognition.onstart = function() {
+                    console.log('Speech recognition started');
+                    isListening = true;
+                };
+
+                recognition.onresult = function(event) {
+                    let interimTranscript = '';
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        let transcript = event.results[i][0].transcript;
+
+                        // Replace spoken commands with punctuation marks
+                        transcript = transcript.replace(/\btačka\b/gi, '.'); // Replace "tačka" with .
+                        transcript = transcript.replace(/\bzarez\b/gi, ','); // Replace "zarez" with ,
+                        transcript = transcript.replace(/\bdve tačke\b/gi, ':'); // Replace "dve tačke" with :
+
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript + ' ';
+                        } else {
+                            interimTranscript += transcript + ' ';
+                        }
+                    }
+
+                    // Format the transcript
+                    let formattedTranscript = formatTranscript(finalTranscript + interimTranscript);
+                    document.getElementById('result').value = formattedTranscript;
+                    console.log('Speech recognition result:', formattedTranscript);
+
+                    // Check if the last recognized text contains the stop command "kraj"
+                    if (formattedTranscript.toLowerCase().includes('kraj')) {
+                        recognition.stop();
+                        console.log('Speech recognition stopped by command.');
+                    }
+                };
+
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    alert('Došlo je do greške u prepoznavanju: ' + event.error);
+                };
+
+                recognition.onend = function() {
+                    console.log('Speech recognition ended');
+                    isListening = false;
+                };
+
+                recognition.start();
+                console.log('Speech recognition initiated');
+            } else {
+                alert('Prepoznavanje govora nije podržano u ovom pregledaču.');
+                console.error('Speech recognition not supported in this browser.');
+            }
+        });
+
+        document.getElementById('stop-recognition').addEventListener('click', () => {
+            if (recognition && isListening) {
+                recognition.stop();
+                console.log('Speech recognition stopped manually.');
+            } else {
+                console.warn('No recognition instance active to stop.');
+            }
+        });
+
+        // Export as PDF
+        document.getElementById('export-pdf').addEventListener('click', () => {
+            const text = document.getElementById('result').value;
+            if (!text) {
+                alert('Nema teksta za preuzimanje.');
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text(text, 10, 10);
+            doc.save('snimak.pdf');
+            console.log('PDF exported successfully.');
+        });
+
+        // Export as Word
+        document.getElementById('export-word').addEventListener('click', () => {
+            const text = document.getElementById('result').value;
+            if (!text) {
+                alert('Nema teksta za preuzimanje.');
+                return;
+            }
+
+            const blob = new Blob([text], { type: 'application/msword' });
+            saveAs(blob, 'snimak.doc');
+            console.log('Word file exported successfully.');
+        });
+
+        // Function to format the transcript
+        function formatTranscript(transcript) {
+            // Add space after comma
+            transcript = transcript.replace(/,(\S)/g, ', $1'); // Ensure comma is followed by a space
+
+            // Add space after period and capitalize the next letter
+            transcript = transcript.replace(/\.\s*(\S)/g, (match, p1) => `. ${p1.toUpperCase()}`);
+
+            // Add space after colon
+            transcript = transcript.replace(/:/g, ': ');
+
+            return transcript;
+        }
+    </script>
+</body>
+</html>
